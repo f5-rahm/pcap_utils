@@ -77,7 +77,11 @@ def delete_irule(bigip):
 
 def download_file(bigip, file_name, msg):
     bigip.download('/mgmt/cm/autodeploy/software-image-downloads/', file_name)
-    print(f'\t{msg}')
+    if os.sys.platform == 'win32':
+        os.rename(file_name, f'outputfiles\{file_name}')
+    else:
+        os.rename(file_name, f'output_files/{file_name}')
+    print(f'{msg}')
 
 
 def prompt_user(msg: str) -> str:
@@ -92,21 +96,20 @@ def run_tcpdump(bigip, virtual_name, case_number):
     dump_string = TCPDUMP_BASH_STRING.replace('VIRTUAL_IP', virtual_ip)
     dump_string = dump_string.replace('CASENUMBER', case_number)
     dump_string = dump_string.replace('DATESTRING', datestring)
-    print(f'\ttcpdump running, please reproduce your issue (waiting 55 sec)...')
-
-    data = {'command': 'run', 'utilCmdArgs': f'-c "{dump_string}"'}
-    # try:
-    bigip.command('/mgmt/tm/util/bash', data)
-    # except RESTAPIError as e:
-    #     print(e, e.get('code'))
-    sleep(56)
+    try:
+        print(f'\tStarting tcpdump...please reproduce your issue now.')
+        data = {'command': 'run', 'utilCmdArgs': f'-c "{dump_string}"'}
+        bigip.command('/mgmt/tm/util/bash', data)
+    except RESTAPIError:
+        pass
+    sleep(10) # TODO if problematic, add while loop and check processes to continue
     return f'{case_number}_{datestring}.pcap'
 
 
 def delete_bigip_file(bigip, file_name, msg):
     data = {'command': 'run', 'utilCmdArgs': f'/shared/images/{file_name}'}
     bigip.command('/mgmt/tm/util/unix-rm', data)
-    print(f'\t{msg}')
+    print(f'{msg}')
 
 
 def session_cache_enabled(bigip, profile_name):
@@ -138,17 +141,19 @@ def create_keyfile(bigip, profile_name, case_number):
 
 
 def download_support_files(bigip, tcpdump_file, sessionkey_file, qkview_file):
-    download_file(bigip, tcpdump_file, f'{tcpdump_file} downloaded.')
-    download_file(bigip, sessionkey_file, f'{sessionkey_file} downloaded.')
-    download_file(bigip, qkview_file, f'{qkview_file} downloaded.')
-    print(f'\tAll support files downloaded from /shared/images...continuing.')
+    print(f'\tDownloading support files from BIG-IP.')
+    download_file(bigip, tcpdump_file, f'\t\t{tcpdump_file} downloaded.')
+    download_file(bigip, sessionkey_file, f'\t\t{sessionkey_file} downloaded.')
+    download_file(bigip, qkview_file, f'\t\t{qkview_file} downloaded.')
+    print(f'\tAll support files downloaded...continuing.')
 
 
 def delete_support_files(bigip, tcpdump_file, sessionkey_file, qkview_file):
-    delete_bigip_file(bigip, tcpdump_file, f'{tcpdump_file} deleted from BIG-IP.')
-    delete_bigip_file(bigip, sessionkey_file, f'{sessionkey_file} deleted from BIG-IP.')
-    delete_bigip_file(bigip, qkview_file, f'{qkview_file} deleted from BIG-IP.')
-    print('\tAll support files cleaned up on BIG-IP...continuing.')
+    print(f'\tCleaning up support files on BIG-IP.')
+    delete_bigip_file(bigip, tcpdump_file, f'\t\t{tcpdump_file} deleted.')
+    delete_bigip_file(bigip, sessionkey_file, f'\t\t{sessionkey_file} deleted.')
+    delete_bigip_file(bigip, qkview_file, f'\t\t{qkview_file} deleted.')
+    print('\tAll support files cleaned up on BIG-IP...complete.')
 
 
 def get_cssl_profile(bigip, vip_name):
@@ -185,16 +190,17 @@ def generate_qkview(bigip, case_number):
             bigip.command('/mgmt/tm/util/unix-mv', data)
             print('\tQkview complete...continuing.')
             break
-    return f'{hostname}.qkview'
+    return f'{case_number}_{hostname}.qkview'
 
 
 if __name__ == '__main__':
 
     print('\n\n\t#################################################')
     print('\t### BIG-IP tcpdump capture collection utility ###')
-    print('\t#################################################\n\n')
+    print('\t#################################################\n')
 
     vip_name, client_ip, case_number = user_responses()
+    print('\n\t-------------------------------------------------\n')
     br = instantiate_bigip()
     profile_name = get_cssl_profile(br, vip_name)
     create_irule(br, profile_name, client_ip)
@@ -206,8 +212,7 @@ if __name__ == '__main__':
     qkview_file = generate_qkview(br, case_number)
     download_support_files(br, tcpdump_file, sessionkey_file, qkview_file)
     delete_support_files(br, tcpdump_file, sessionkey_file, qkview_file)
+    print('\t\n-------------------------------------------------\n')
+    print('Please upload files in output_files directory to your support case or to supportfiles.f5.com using '
+          'credentials provided by your case worker.')
 
-    # TODO - Apply sessionkeys file to capture file, save filtered output to new capture
-    # TODO - Display to user: original pcap, session keys file, modified pcap
-    # TODO - Test Cache Disabled
-    # TODO - ERROR CHECKING

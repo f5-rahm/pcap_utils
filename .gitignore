@@ -50,3 +50,6 @@ __lock__
 docs/_build
 venv/*
 docs/venv/*
+
+# Support Files
+output_files/*
